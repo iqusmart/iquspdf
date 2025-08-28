@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PDFlovers — Powerful PDF Tools in Your Browser</title>
+  <meta name="description" content="PDFlovers: Merge, split, compress, convert, watermark, number pages, sign, and OCR — all in your browser. No upload.">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Icons -->
+  <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <!-- Three.js for 3D animated background -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+
+  <style>
+    :root { --glass: rgba(255,255,255,0.12); --glass-2: rgba(255,255,255,0.25); }
+    html, body { height: 100%; }
+    body {
+      background: radial-gradient(circle at 20% 20%, #0ea5e9 0%, #7c3aed 35%, #ef4444 70%, #111827 100%);
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    /* Glassmorphism cards */
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 1.25rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    .btn {
+      border-radius: 9999px;
+      padding: 0.6rem 1.1rem;
+      font-weight: 700;
+      transition: transform .08s ease, box-shadow .2s ease;
+      background: linear-gradient(45deg,#34d399,#22d3ee,#f472b6,#f59e0b);
+      background-size: 300% 300%;
+      animation: hue 6s ease infinite;
+      color: #0b1020;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .tag {
+      font-size: .7rem;
+      border-radius: 9999px;
+      padding: .25rem .6rem;
+      background: rgba(255,255,255,0.15);
+    }
+    @keyframes hue { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+
+    /* 3D canvas covers the page */
+    #bg3d {
+      position: fixed; inset: 0; z-index: -1;
+    }
+    /* Modals */
+    .modal {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 1rem;
+      background: rgba(2,6,23,0.78);
+      z-index: 50;
+    }
+    .modal.open { display: flex; }
+    .tile {
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .tile:hover { transform: translateY(-4px) scale(1.01); box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+    .dropzone {
+      border: 2px dashed rgba(255,255,255,0.35); border-radius: 1rem; padding: 1.25rem; text-align:center;
+    }
+    .hidden { display:none; }
+    .thumb { border-radius: .75rem; overflow:hidden; }
+    .progress {
+      height: .5rem; background: rgba(255,255,255,0.2); border-radius: 9999px; overflow:hidden;
+    }
+    .progress > div { height:100%; background: linear-gradient(90deg,#22d3ee,#34d399,#a78bfa); width:0%; transition: width .3s ease; }
+    a.link { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <canvas id="bg3d"></canvas>
+
+  <!-- Header -->
+  <header class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h1 class="text-3xl font-black tracking-tight">PDFlovers</h1>
+          <p class="text-white/70 -mt-1">All-in-one, privacy-first PDF toolbox ✨</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="tag">100% in-browser</span>
+        <a href="#about" class="tag">About</a>
+        <a href="#faq" class="tag">FAQ</a>
+        <a href="https://github.com" target="_blank" class="tag">GitHub Pages Ready</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4">
+    <div class="glass p-6 md:p-10">
+      <div class="grid md:grid-cols-2 gap-8">
+        <div>
+          <h2 class="text-4xl md:text-5xl font-extrabold leading-tight">Work your PDF magic — <span class="bg-clip-text text-transparent bg-gradient-to-r from-teal-300 via-fuchsia-300 to-amber-300">right in your browser</span>.</h2>
+          <p class="mt-4 text-white/80">Merge, split, compress, convert images, add watermarks & page numbers, reorder and rotate pages, sign, and OCR — without uploading to any server.</p>
+          <div class="mt-6 flex gap-3 flex-wrap">
+            <button class="btn" onclick="document.getElementById('mergeModal').classList.add('open')">Try Merge</button>
+            <button class="btn" onclick="document.getElementById('organizeModal').classList.add('open')">Organize Pages</button>
+          </div>
+          <p class="mt-3 text-xs text-white/70">Note: Office file conversions, password protect/unlock, and PDF repair are not supported in-browser.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="tile glass p-5">
+            <div class="text-lg font-bold">Merge PDF</div>
+            <p class="text-sm text-white/80">Combine multiple PDFs.</p>
+          </div>
+          <div class="tile glass p-5">
+            <div class="text-lg font-bold">Split PDF</div>
+            <p class="text-sm text-white/80">Extract ranges or pages.</p>
+          </div>
+          <div class="tile glass p-5">
+            <div class="text-lg font-bold">Compress</div>
+            <p class="text-sm text-white/80">Downsize via smart raster.</p>
+          </div>
+          <div class="tile glass p-5">
+            <div class="text-lg font-bold">Images ⇄ PDF</div>
+            <p class="text-sm text-white/80">JPG/PNG to PDF, and back.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tools Grid -->
+  <section class="max-w-7xl mx-auto px-4 mt-10 mb-24">
+    <h3 class="text-2xl font-extrabold mb-4">Tools</h3>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Merge PDF</h4>
+          <button class="tag" onclick="openModal('mergeModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Combine multiple PDFs into one.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Split PDF</h4>
+          <button class="tag" onclick="openModal('splitModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Extract a page range or specific pages.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Organize / Rotate</h4>
+          <button class="tag" onclick="openModal('organizeModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Drag to reorder, rotate pages, export.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Compress PDF</h4>
+          <button class="tag" onclick="openModal('compressModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Shrink size by rasterizing pages.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Watermark</h4>
+          <button class="tag" onclick="openModal('watermarkModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Add semi-transparent text watermark.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Page Numbers</h4>
+          <button class="tag" onclick="openModal('pagenumModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Add page numbers to your PDF.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Images → PDF</h4>
+          <button class="tag" onclick="openModal('img2pdfModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Create a PDF from images.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">PDF → Images</h4>
+          <button class="tag" onclick="openModal('pdf2imgModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Export each page as a JPG (ZIP).</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Sign PDF</h4>
+          <button class="tag" onclick="openModal('signModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Draw a signature and place it.</p>
+      </div>
+
+      <div class="glass p-5 tile">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">OCR (Extract Text)</h4>
+          <button class="tag" onclick="openModal('ocrModal')">Open</button>
+        </div>
+        <p class="text-sm text-white/80">Recognize text from scanned pages.</p>
+      </div>
+
+      <div class="glass p-5 tile opacity-60">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Protect / Unlock</h4>
+          <span class="tag">Not supported in-browser</span>
+        </div>
+        <p class="text-sm text-white/80">PDF password encryption/decryption requires server-side processing.</p>
+      </div>
+
+      <div class="glass p-5 tile opacity-60">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xl font-bold">Office ⇄ PDF</h4>
+          <span class="tag">Not supported in-browser</span>
+        </div>
+        <p class="text-sm text-white/80">Docx/Xlsx/Pptx conversion needs specialized engines not available on the web.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Merge Modal -->
+  <div class="modal" id="mergeModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('mergeModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Merge PDFs</h3>
+      <p class="text-sm text-white/80 mb-4">Add PDFs and arrange order. Files are processed locally.</p>
+      <div class="dropzone" id="mergeDrop">Drop PDFs here or <label class="link cursor-pointer"><input type="file" id="mergeFiles" accept="application/pdf" multiple class="hidden">browse</label></div>
+      <ul id="mergeList" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"></ul>
+      <div class="mt-4 flex items-center gap-3">
+        <button class="btn" id="mergeRun">Merge & Download</button>
+        <span class="text-sm text-white/70">Drag to reorder</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Split Modal -->
+  <div class="modal" id="splitModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('splitModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Split PDF</h3>
+      <p class="text-sm text-white/80 mb-4">Enter ranges like 1-3,5,7-9 (1-based).</p>
+      <input type="file" id="splitFile" accept="application/pdf" class="mb-3">
+      <input type="text" id="splitRanges" placeholder="e.g., 1-3,5,7-9" class="w-full px-3 py-2 rounded-lg text-slate-900">
+      <div class="mt-3">
+        <button class="btn" id="splitRun">Extract & Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organize Modal -->
+  <div class="modal" id="organizeModal">
+    <div class="glass w-full max-w-5xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('organizeModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Organize & Rotate Pages</h3>
+      <input type="file" id="orgFile" accept="application/pdf" class="mb-3">
+      <div id="orgThumbs" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div class="mt-4 flex flex-wrap gap-3 items-center">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="orgRenderText" checked> Render text as images (faster export)</label>
+        <button class="btn" id="orgExport">Export PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compress Modal -->
+  <div class="modal" id="compressModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('compressModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Compress PDF</h3>
+      <input type="file" id="compFile" accept="application/pdf" class="mb-3">
+      <label class="block text-sm mb-1">Quality</label>
+      <input type="range" id="compQuality" min="30" max="100" step="5" value="70" class="w-full">
+      <div class="progress mt-3"><div id="compProg"></div></div>
+      <div class="mt-3">
+        <button class="btn" id="compRun">Compress & Download</button>
+      </div>
+      <p class="text-xs text-white/70 mt-2">Compression rasterizes pages; selectable text may be lost.</p>
+    </div>
+  </div>
+
+  <!-- Watermark Modal -->
+  <div class="modal" id="watermarkModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('watermarkModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Add Watermark</h3>
+      <input type="file" id="wmFile" accept="application/pdf" class="mb-3">
+      <div class="grid grid-cols-2 gap-3">
+        <input type="text" id="wmText" placeholder="WATERMARK" class="px-3 py-2 rounded-lg text-slate-900">
+        <input type="number" id="wmSize" value="36" class="px-3 py-2 rounded-lg text-slate-900" />
+        <label class="flex items-center gap-2"><span>Opacity</span><input type="range" id="wmOpacity" min="10" max="100" value="20"></label>
+        <select id="wmPos" class="px-3 py-2 rounded-lg text-slate-900">
+          <option value="center">Center</option>
+          <option value="tile">Tile</option>
+          <option value="diagonal">Diagonal</option>
+        </select>
+      </div>
+      <div class="mt-3">
+        <button class="btn" id="wmRun">Apply & Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page Numbers Modal -->
+  <div class="modal" id="pagenumModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('pagenumModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Add Page Numbers</h3>
+      <input type="file" id="pnFile" accept="application/pdf" class="mb-3">
+      <div class="grid grid-cols-2 gap-3">
+        <input type="text" id="pnFormat" value="Page {{n}}" class="px-3 py-2 rounded-lg text-slate-900">
+        <select id="pnPos" class="px-3 py-2 rounded-lg text-slate-900">
+          <option value="bottom-right">Bottom Right</option>
+          <option value="bottom-left">Bottom Left</option>
+          <option value="bottom-center">Bottom Center</option>
+          <option value="top-right">Top Right</option>
+          <option value="top-left">Top Left</option>
+          <option value="top-center">Top Center</option>
+        </select>
+      </div>
+      <div class="mt-3">
+        <button class="btn" id="pnRun">Apply & Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Images to PDF Modal -->
+  <div class="modal" id="img2pdfModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('img2pdfModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Images → PDF</h3>
+      <input type="file" id="img2pdfFiles" accept="image/*" multiple class="mb-3">
+      <div id="imgList" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div class="mt-3 flex items-center gap-3">
+        <label class="flex items-center gap-2"><span>Page Size</span>
+          <select id="imgPageSize" class="px-2 py-1 rounded text-slate-900">
+            <option value="A4">A4</option>
+            <option value="Letter">Letter</option>
+            <option value="Auto">Auto (image size)</option>
+          </select>
+        </label>
+        <button class="btn" id="img2pdfRun">Create PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF to Images Modal -->
+  <div class="modal" id="pdf2imgModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('pdf2imgModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">PDF → JPG (ZIP)</h3>
+      <input type="file" id="pdf2imgFile" accept="application/pdf" class="mb-3">
+      <label class="block text-sm mb-1">Quality</label>
+      <input type="range" id="pdf2imgQuality" min="50" max="100" step="5" value="90" class="w-full">
+      <div class="progress mt-3"><div id="pdf2imgProg"></div></div>
+      <div class="mt-3">
+        <button class="btn" id="pdf2imgRun">Export Images</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sign Modal -->
+  <div class="modal" id="signModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('signModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Sign PDF</h3>
+      <input type="file" id="signFile" accept="application/pdf" class="mb-3">
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <p class="text-sm mb-2">Draw your signature:</p>
+          <canvas id="signPad" width="500" height="180" class="bg-white rounded-lg"></canvas>
+          <div class="mt-2 flex gap-2">
+            <button class="tag" id="signClear">Clear</button>
+            <span class="text-xs text-white/70">Signature will be placed bottom-right of each page.</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Scale</label>
+          <input type="range" id="signScale" min="30" max="150" value="80">
+          <div class="mt-4">
+            <button class="btn" id="signRun">Sign & Download</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR Modal -->
+  <div class="modal" id="ocrModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('ocrModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">OCR (Extract text)</h3>
+      <input type="file" id="ocrFile" accept="application/pdf,image/*" class="mb-3">
+      <div class="progress mt-3"><div id="ocrProg"></div></div>
+      <div class="mt-3 flex gap-3">
+        <button class="btn" id="ocrRun">Extract Text</button>
+        <a id="ocrOut" class="tag hidden" download="ocr.txt">Download TXT</a>
+      </div>
+      <p class="text-xs text-white/70 mt-2">Uses Tesseract.js in your browser (English). For best results, upload high-resolution scans.</p>
+    </div>
+  </div>
+
+  <!-- Footer / About -->
+  <footer id="about" class="max-w-6xl mx-auto px-4 pb-16">
+    <div class="glass p-6">
+      <h4 class="text-xl font-bold mb-2">About PDFlovers</h4>
+      <p class="text-white/80 text-sm">PDFlovers is an independent, open, and client‑side PDF toolbox inspired by iLovePDF. It runs entirely in your browser for privacy. Some enterprise features (Office conversions, password encryption/decryption, repair) typically require server‑side software and are not included.</p>
+      <div class="mt-4 text-xs text-white/60" id="faq">
+        <p>Tip: For big PDFs, processing may take a while because everything happens locally.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ===== Helper UI =====
+    function openModal(id){ document.getElementById(id).classList.add('open'); }
+    function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+    function formatBytes(bytes) {
+      const sizes = ['B','KB','MB','GB']; if (bytes===0) return '0 B';
+      const i = Math.floor(Math.log(bytes)/Math.log(1024));
+      return (bytes/Math.pow(1024,i)).toFixed(2)+' '+sizes[i];
+    }
+    function fileNameNoExt(name){
+      const i = name.lastIndexOf('.'); return i>0?name.substring(0,i):name;
+    }
+
+    // ===== 3D Background (Three.js) =====
+    (function(){
+      const canvas = document.getElementById('bg3d');
+      const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+      camera.position.z = 8;
+      const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambient);
+      const point = new THREE.PointLight(0xffffff, 1.2);
+      point.position.set(10,10,10);
+      scene.add(point);
+
+      // Colorful metaball-ish blob: sphere + noise via vertex shader-ish simple scale anim + particles
+      const geo = new THREE.IcosahedronGeometry(3, 5);
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.2, roughness: 0.3, envMapIntensity:1,
+        emissive: 0x111111, transparent:true, opacity:0.6});
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh);
+
+      const partGeo = new THREE.BufferGeometry();
+      const N = 1200;
+      const positions = new Float32Array(N*3);
+      for(let i=0;i<N;i++){ positions[i*3+0]=(Math.random()-0.5)*20; positions[i*3+1]=(Math.random()-0.5)*12; positions[i*3+2]=(Math.random()-0.5)*20; }
+      partGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+      const partMat = new THREE.PointsMaterial({ size: 0.06, transparent:true, opacity:0.85 });
+      const points = new THREE.Points(partGeo, partMat);
+      scene.add(points);
+
+      function onResize(){ renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); }
+      addEventListener('resize', onResize); onResize();
+
+      let t=0;
+      function animate(){
+        requestAnimationFrame(animate);
+        t+=0.01;
+        mesh.rotation.x += 0.002;
+        mesh.rotation.y += 0.003;
+        mat.emissiveIntensity = 0.7 + 0.3*Math.sin(t*2.0);
+        // animate point color through rainbow
+        const hue = (t*20)%360;
+        partMat.color.setHSL((hue%360)/360, 0.7, 0.6);
+        renderer.render(scene, camera);
+      } animate();
+    })();
+
+    // ====== PDF Helpers ======
+    const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.js";
+
+    async function readFileAsArrayBuffer(file){
+      return new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(fr.result);
+        fr.onerror = rej;
+        fr.readAsArrayBuffer(file);
+      });
+    }
+    async function loadPdfDoc(arrayBuffer){
+      return PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    }
+    function dataUriToUint8Array(dataURI) {
+      const byteString = atob(dataURI.split(',')[1]);
+      const array = new Uint8Array(byteString.length);
+      for (let i = 0; i < byteString.length; i++) array[i] = byteString.charCodeAt(i);
+      return array;
+    }
+    async function renderPdfToCanvasPages(arrayBuffer, scale = 1.5) {
+      const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+      const canvases = [];
+      for (let i=1; i<=pdf.numPages; i++){
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({canvasContext: ctx, viewport}).promise;
+        canvases.push(canvas);
+      }
+      return canvases;
+    }
+    async function buildPdfFromCanvases(canvases, fileBaseName="document"){
+      const doc = await PDFDocument.create();
+      for (const c of canvases){
+        const pngBytes = await new Promise(r=>c.toBlob(b=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsArrayBuffer(b); }, 'image/png', 0.92));
+        const img = await doc.embedPng(pngBytes);
+        const page = doc.addPage([img.width, img.height]);
+        page.drawImage(img, {x:0, y:0, width: img.width, height: img.height});
+      }
+      const bytes = await doc.save();
+      saveAs(new Blob([bytes], {type:'application/pdf'}), fileBaseName + ".pdf");
+    }
+
+    // ===== Merge =====
+    (function(){
+      const dz = document.getElementById('mergeDrop');
+      const inp = document.getElementById('mergeFiles');
+      const list = document.getElementById('mergeList');
+      const btn = document.getElementById('mergeRun');
+      const files = [];
+
+      function addFiles(fileList){
+        for (const f of fileList){
+          if (f.type !== 'application/pdf') continue;
+          files.push(f);
+          const li = document.createElement('li');
+          li.className = 'glass p-3 rounded-xl flex items-center justify-between';
+          li.draggable = true;
+          li.innerHTML = `<div><div class="font-semibold">${f.name}</div><div class="text-xs text-white/70">${formatBytes(f.size)}</div></div>
+                          <button class="tag remove">Remove</button>`;
+          li.querySelector('.remove').onclick = ()=>{ list.removeChild(li); const i=files.indexOf(f); if(i>=0) files.splice(i,1); };
+          list.appendChild(li);
+        }
+      }
+      dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('ring-2','ring-white'); });
+      dz.addEventListener('dragleave', e=>{ dz.classList.remove('ring-2','ring-white'); });
+      dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('ring-2','ring-white'); addFiles(e.dataTransfer.files); });
+      inp.addEventListener('change', e=> addFiles(e.target.files));
+      new Sortable(list, { animation: 150 });
+
+      btn.onclick = async ()=>{
+        if (!files.length) return alert('Add at least one PDF');
+        const out = await PDFDocument.create();
+        for (const f of files){
+          const ab = await readFileAsArrayBuffer(f);
+          const src = await loadPdfDoc(ab);
+          const copied = await out.copyPages(src, src.getPageIndices());
+          copied.forEach(p=>out.addPage(p));
+        }
+        const bytes = await out.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), "merged.pdf");
+      };
+    })();
+
+    // ===== Split =====
+    (function(){
+      const f = document.getElementById('splitFile');
+      const ranges = document.getElementById('splitRanges');
+      const btn = document.getElementById('splitRun');
+      btn.onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const src = await loadPdfDoc(ab);
+        const total = src.getPageCount();
+        const parts = ranges.value.split(',').map(s=>s.trim()).filter(Boolean);
+        const pick = new Set();
+        function addRange(a,b){ for(let i=a;i<=b;i++) if (i>=1 && i<=total) pick.add(i-1); }
+        for (const token of parts){
+          if (token.includes('-')){
+            const [a,b] = token.split('-').map(n=>parseInt(n));
+            if (!isNaN(a) && !isNaN(b)) addRange(a,b);
+          } else {
+            const n = parseInt(token); if (!isNaN(n)) addRange(n,n);
+          }
+        }
+        if (!pick.size) return alert('No valid pages to extract');
+        const out = await PDFDocument.create();
+        const copied = await out.copyPages(src, Array.from(pick).sort((a,b)=>a-b));
+        copied.forEach(p=>out.addPage(p));
+        const bytes = await out.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), fileNameNoExt(f.files[0].name)+"_split.pdf");
+      };
+    })();
+
+    // ===== Organize/Rotate =====
+    (function(){
+      const f = document.getElementById('orgFile');
+      const thumbs = document.getElementById('orgThumbs');
+      const btn = document.getElementById('orgExport');
+      const renderText = document.getElementById('orgRenderText');
+      let srcAb = null;
+      let pageOrder = [];
+      let rotations = [];
+      f.onchange = async ()=>{
+        thumbs.innerHTML='';
+        srcAb = await readFileAsArrayBuffer(f.files[0]);
+        const canvases = await renderPdfToCanvasPages(srcAb, 0.75);
+        pageOrder = canvases.map((_,i)=>i);
+        rotations = canvases.map(()=>0);
+        canvases.forEach((c, idx)=>{
+          const div = document.createElement('div');
+          div.className = 'glass p-2 thumb';
+          div.innerHTML = `<div class="text-xs mb-1 opacity-80">Page ${idx+1}</div>`;
+          div.appendChild(c);
+          const controls = document.createElement('div');
+          controls.className = 'mt-2 flex gap-2';
+          const l = document.createElement('button'); l.className='tag'; l.textContent='⟲';
+          const r = document.createElement('button'); r.className='tag'; r.textContent='⟳';
+          controls.appendChild(l); controls.appendChild(r);
+          div.appendChild(controls);
+          l.onclick = ()=>{ rotations[idx] = (rotations[idx]-90)%360; c.style.transform = `rotate(${rotations[idx]}deg)`; };
+          r.onclick = ()=>{ rotations[idx] = (rotations[idx]+90)%360; c.style.transform = `rotate(${rotations[idx]}deg)`; };
+          thumbs.appendChild(div);
+        });
+        new Sortable(thumbs, { animation:150, onEnd:()=>{
+          const newOrder = [];
+          Array.from(thumbs.children).forEach(child=>{
+            const pageText = child.querySelector('.opacity-80').textContent;
+            const n = parseInt(pageText.replace('Page ',''))-1;
+            newOrder.push(n);
+          });
+          pageOrder = newOrder;
+        }});
+      };
+      btn.onclick = async ()=>{
+        if (!srcAb) return alert('Choose a PDF');
+        const src = await loadPdfDoc(srcAb);
+        const out = await PDFDocument.create();
+        // Use copyPages then rotate or rasterize
+        for (const originalIndex of pageOrder){
+          const [page] = await out.copyPages(src, [originalIndex]);
+          const rot = rotations[originalIndex];
+          if (rot) page.setRotation(degrees((page.getRotation().angle + rot) % 360));
+          out.addPage(page);
+        }
+        let bytes = await out.save();
+        if (renderText.checked){
+          // Optional raster to ensure rotations/overlays stay consistent
+          const canvases = await renderPdfToCanvasPages(bytes, 1.2);
+          await buildPdfFromCanvases(canvases, fileNameNoExt(f.files[0].name)+'_organized');
+        } else {
+          saveAs(new Blob([bytes], {type:'application/pdf'}), fileNameNoExt(f.files[0].name)+'_organized.pdf');
+        }
+      };
+    })();
+
+    // ===== Compress =====
+    (function(){
+      const f = document.getElementById('compFile');
+      const q = document.getElementById('compQuality');
+      const run = document.getElementById('compRun');
+      const prog = document.getElementById('compProg');
+      run.onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        prog.style.width = '0%';
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const pdf = await pdfjsLib.getDocument({data: ab}).promise;
+        const canvases = [];
+        for (let i=1; i<=pdf.numPages; i++){
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({scale: 1.0});
+          const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+          // re-draw to a JPEG with chosen quality
+          const tmp = document.createElement('canvas'); tmp.width = canvas.width; tmp.height = canvas.height;
+          const tctx = tmp.getContext('2d'); tctx.drawImage(canvas,0,0);
+          const dataUrl = tmp.toDataURL('image/jpeg', parseInt(q.value)/100);
+          const outCanvas = document.createElement('canvas'); outCanvas.width = tmp.width; outCanvas.height = tmp.height;
+          const img = new Image(); await new Promise(r=>{ img.onload=()=>{ const c2 = outCanvas.getContext('2d'); c2.drawImage(img,0,0); r(); }; img.src=dataUrl; });
+          canvases.push(outCanvas);
+          prog.style.width = Math.round(i/pdf.numPages*100)+'%';
+        }
+        await buildPdfFromCanvases(canvases, fileNameNoExt(f.files[0].name)+'_compressed');
+      };
+    })();
+
+    // ===== Watermark =====
+    (function(){
+      const f = document.getElementById('wmFile');
+      const t = document.getElementById('wmText');
+      const size = document.getElementById('wmSize');
+      const pos = document.getElementById('wmPos');
+      const opacity = document.getElementById('wmOpacity');
+      document.getElementById('wmRun').onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const doc = await loadPdfDoc(ab);
+        const font = await doc.embedFont(StandardFonts.HelveticaBold);
+        const pages = doc.getPages();
+        pages.forEach(p=>{
+          const { width, height } = p.getSize();
+          const text = t.value || 'WATERMARK';
+          const fontSize = parseInt(size.value)||36;
+          const color = rgb(1,1,1);
+          const op = Math.max(0.05, Math.min(1, parseInt(opacity.value)/100));
+          if (pos.value==='center'){
+            const textWidth = font.widthOfTextAtSize(text, fontSize);
+            p.drawText(text, { x: (width-textWidth)/2, y: height/2, size: fontSize, font, color, opacity: op, rotate: degrees(0) });
+          } else if (pos.value==='diagonal'){
+            const textWidth = font.widthOfTextAtSize(text, fontSize);
+            p.drawText(text, { x: (width-textWidth)/2, y: height/2, size: fontSize, font, color, opacity: op, rotate: degrees(45) });
+          } else {
+            // tile
+            const step = fontSize*6;
+            for (let y=0; y<height+step; y+=step){
+              for (let x=0; x<width+step; x+=step){
+                p.drawText(text, { x:x-40, y:y-20, size: fontSize, font, color, opacity: op, rotate: degrees(30) });
+              }
+            }
+          }
+        });
+        const bytes = await doc.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), fileNameNoExt(f.files[0].name)+'_watermarked.pdf');
+      };
+    })();
+
+    // ===== Page Numbers =====
+    (function(){
+      const f = document.getElementById('pnFile');
+      const fmt = document.getElementById('pnFormat');
+      const pos = document.getElementById('pnPos');
+      document.getElementById('pnRun').onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const doc = await loadPdfDoc(ab);
+        const font = await doc.embedFont(StandardFonts.Helvetica);
+        const pages = doc.getPages();
+        pages.forEach((p, i)=>{
+          const { width, height } = p.getSize();
+          const label = fmt.value.replace('{{n}}', (i+1)).replace('{{total}}', pages.length);
+          const size = 12;
+          const margin = 24;
+          const opts = { size, font, color: rgb(1,1,1), opacity: 0.9 };
+          if (pos.value.includes('bottom')) opts.y = margin;
+          if (pos.value.includes('top')) opts.y = height - margin - size;
+          if (pos.value.includes('left')) opts.x = margin;
+          if (pos.value.includes('right')) { const w = font.widthOfTextAtSize(label, size); opts.x = width - margin - w; }
+          if (pos.value.includes('center')) { const w = font.widthOfTextAtSize(label, size); opts.x = (width - w) / 2; }
+          p.drawText(label, opts);
+        });
+        const bytes = await doc.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), fileNameNoExt(f.files[0].name)+'_numbered.pdf');
+      };
+    })();
+
+    // ===== Images → PDF =====
+    (function(){
+      const inp = document.getElementById('img2pdfFiles');
+      const box = document.getElementById('imgList');
+      const run = document.getElementById('img2pdfRun');
+      const pageSel = document.getElementById('imgPageSize');
+      let images = [];
+      inp.onchange = ()=>{
+        images = Array.from(inp.files);
+        box.innerHTML='';
+        images.forEach((f, i)=>{
+          const url = URL.createObjectURL(f);
+          const div = document.createElement('div'); div.className='thumb glass p-2';
+          div.innerHTML = `<div class="text-xs mb-1 opacity-80">${f.name}</div><img src="${url}" class="rounded" />`;
+          box.appendChild(div);
+        });
+        new Sortable(box, {animation:150});
+      };
+      run.onclick = async ()=>{
+        if (!images.length) return alert('Choose images');
+        const doc = await PDFDocument.create();
+        for (const f of images){
+          const ab = await readFileAsArrayBuffer(f);
+          let img; let dims;
+          if (f.type.includes('png')){ img = await doc.embedPng(ab); dims = img.scale(1); }
+          else { img = await doc.embedJpg(ab); dims = img.scale(1); }
+          let page;
+          if (pageSel.value==='A4'){ page = doc.addPage([595.28, 841.89]); }
+          else if (pageSel.value==='Letter'){ page = doc.addPage([612, 792]); }
+          else { page = doc.addPage([dims.width, dims.height]); }
+          const { width, height } = page.getSize();
+          const scale = Math.min(width/dims.width, height/dims.height);
+          const w = dims.width*scale, h = dims.height*scale;
+          page.drawImage(img, { x:(width-w)/2, y:(height-h)/2, width:w, height:h });
+        }
+        const bytes = await doc.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), 'images_to_pdf.pdf');
+      };
+    })();
+
+    // ===== PDF → Images (ZIP) =====
+    (function(){
+      const f = document.getElementById('pdf2imgFile');
+      const q = document.getElementById('pdf2imgQuality');
+      const run = document.getElementById('pdf2imgRun');
+      const prog = document.getElementById('pdf2imgProg');
+      run.onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const pdf = await pdfjsLib.getDocument({data: ab}).promise;
+        const zip = new JSZip();
+        for (let i=1; i<=pdf.numPages; i++){
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({scale: 2.0});
+          const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+          const dataUrl = canvas.toDataURL('image/jpeg', parseInt(q.value)/100);
+          const u8 = dataUriToUint8Array(dataUrl);
+          zip.file(`page_${i}.jpg`, u8);
+          prog.style.width = Math.round(i/pdf.numPages*100)+'%';
+        }
+        const content = await zip.generateAsync({type:'blob'});
+        saveAs(content, fileNameNoExt(f.files[0].name)+'_images.zip');
+      };
+    })();
+
+    // ===== Sign PDF =====
+    (function(){
+      const f = document.getElementById('signFile');
+      const pad = document.getElementById('signPad');
+      const clear = document.getElementById('signClear');
+      const scale = document.getElementById('signScale');
+      const run = document.getElementById('signRun');
+      const ctx = pad.getContext('2d');
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      let drawing = false;
+      pad.addEventListener('mousedown', ()=>{ drawing=true; ctx.beginPath(); });
+      pad.addEventListener('mouseup', ()=>{ drawing=false; });
+      pad.addEventListener('mouseleave', ()=>{ drawing=false; });
+      pad.addEventListener('mousemove', (e)=>{ if(!drawing) return; const r=pad.getBoundingClientRect(); ctx.lineTo(e.clientX-r.left, e.clientY-r.top); ctx.stroke(); });
+      clear.onclick = ()=>{ ctx.clearRect(0,0,pad.width,pad.height); };
+
+      run.onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF');
+        const ab = await readFileAsArrayBuffer(f.files[0]);
+        const doc = await loadPdfDoc(ab);
+        const pngBytes = await new Promise(r=>pad.toBlob(b=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsArrayBuffer(b); }, 'image/png'));
+        const sig = await doc.embedPng(pngBytes);
+        const pages = doc.getPages();
+        pages.forEach(p=>{
+          const { width, height } = p.getSize();
+          const s = (parseInt(scale.value)/100);
+          const imgW = sig.width * 0.7 * s;
+          const imgH = sig.height * 0.7 * s;
+          p.drawImage(sig, { x: width - imgW - 36, y: 36, width: imgW, height: imgH });
+        });
+        const bytes = await doc.save();
+        saveAs(new Blob([bytes], {type:'application/pdf'}), fileNameNoExt(f.files[0].name)+'_signed.pdf');
+      };
+    })();
+
+    // ===== OCR (extract text) =====
+    (function(){
+      const f = document.getElementById('ocrFile');
+      const run = document.getElementById('ocrRun');
+      const out = document.getElementById('ocrOut');
+      const prog = document.getElementById('ocrProg');
+      run.onclick = async ()=>{
+        if (!f.files[0]) return alert('Choose a PDF or image');
+        prog.style.width = '0%';
+        let texts = [];
+        if (f.files[0].type === 'application/pdf'){
+          const ab = await readFileAsArrayBuffer(f.files[0]);
+          const canvases = await renderPdfToCanvasPages(ab, 2.0);
+          for (let i=0;i<canvases.length;i++){
+            const dataUrl = canvases[i].toDataURL('image/png');
+            const res = await Tesseract.recognize(dataUrl, 'eng', { logger: m=>{ if(m.status==='recognizing text' && m.progress) prog.style.width = Math.round((i+m.progress)/canvases.length*100)+'%'; } });
+            texts.push(`--- Page ${i+1} ---\n`+res.data.text.trim());
+          }
+        } else {
+          const dataUrl = URL.createObjectURL(f.files[0]);
+          const res = await Tesseract.recognize(dataUrl, 'eng', { logger: m=>{ if(m.status==='recognizing text' && m.progress) prog.style.width = Math.round(m.progress*100)+'%'; } });
+          texts.push(res.data.text.trim());
+        }
+        const blob = new Blob([texts.join('\n\n')], {type:'text/plain'});
+        const url = URL.createObjectURL(blob);
+        out.href = url; out.classList.remove('hidden'); out.textContent = 'Download TXT';
+      };
+    })();
+
+    // Activate icons
+    document.addEventListener('DOMContentLoaded', ()=>{ if (window.lucide) lucide.createIcons(); });
+  </script>
+</body>
+</html>
