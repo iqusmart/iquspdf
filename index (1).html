@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDFlovers — All-in-one PDF tools (client-side)</title>
+  <meta name="description" content="PDFlovers: Merge, Split, Compress, Organize, Images↔PDF — all in your browser.">
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Core libs -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <!-- 3D background -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+
+  <style>
+    :root { --glass: rgba(255,255,255,.1); }
+    html, body { height: 100%; }
+    body {
+      background: radial-gradient(circle at 10% 10%, #06b6d4, #7c3aed 40%, #ef4444 70%, #0f172a 100%);
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    #bg3d { position: fixed; inset: 0; z-index: -1; }
+    .glass { background: var(--glass); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.15); border-radius: 1.25rem; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .btn { border-radius: 9999px; padding: .65rem 1.1rem; font-weight: 700; background: linear-gradient(45deg,#22d3ee,#34d399,#f472b6,#f59e0b); background-size: 300% 300%; animation: hue 6s ease infinite; color: #0b1020; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+    @keyframes hue { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    .tag { font-size: .7rem; border-radius: 9999px; padding: .25rem .6rem; background: rgba(255,255,255,.2); }
+    .modal { position: fixed; inset: 0; display: none; align-items:center; justify-content: center; padding: 1rem; background: rgba(2,6,23,.78); z-index: 50; }
+    .modal.open { display: flex; }
+    .dropzone { border: 2px dashed rgba(255,255,255,.35); border-radius: 1rem; padding: 1.25rem; text-align:center; }
+    .thumb canvas, .thumb img { width: 100%; height: auto; display:block; }
+    .progress { height:.5rem; background: rgba(255,255,255,.2); border-radius: 9999px; overflow:hidden; }
+    .progress>div { height:100%; background: linear-gradient(90deg,#22d3ee,#34d399,#a78bfa); width:0%; transition: width .3s ease; }
+  </style>
+</head>
+<body>
+  <canvas id="bg3d"></canvas>
+
+  <header class="max-w-7xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center ring-1 ring-white/20">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 12h16M4 18h10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h1 class="text-3xl font-black">PDFlovers</h1>
+          <p class="text-white/70 -mt-1">Powerful PDF tools — 100% in-browser</p>
+        </div>
+      </div>
+      <div class="hidden md:flex items-center gap-3">
+        <span class="tag">Private</span>
+        <span class="tag">Open Source Tools</span>
+        <a class="tag" href="#faq">FAQ</a>
+      </div>
+    </div>
+  </header>
+
+  <section class="max-w-6xl mx-auto px-4">
+    <div class="glass p-6 md:p-10">
+      <div class="grid md:grid-cols-2 gap-8">
+        <div>
+          <h2 class="text-4xl md:text-5xl font-extrabold leading-tight">Do more with your PDFs — <span class="bg-clip-text text-transparent bg-gradient-to-r from-teal-300 via-fuchsia-300 to-amber-300">right now</span>.</h2>
+          <p class="mt-4 text-white/80">Merge, split, compress, convert images, reorder and rotate pages — all processed locally.</p>
+          <div class="mt-6 flex gap-3 flex-wrap">
+            <button class="btn" onclick="openModal('mergeModal')">Try Merge</button>
+            <button class="btn" onclick="openModal('organizeModal')">Organize Pages</button>
+          </div>
+          <p class="mt-3 text-xs text-white/70">Tip: Big PDFs take longer because everything runs on your device.</p>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="glass p-5"><div class="text-lg font-bold">Merge</div><p class="text-sm text-white/80">Combine PDFs</p></div>
+          <div class="glass p-5"><div class="text-lg font-bold">Split</div><p class="text-sm text-white/80">Extract ranges</p></div>
+          <div class="glass p-5"><div class="text-lg font-bold">Compress</div><p class="text-sm text-white/80">Reduce size</p></div>
+          <div class="glass p-5"><div class="text-lg font-bold">Images↔PDF</div><p class="text-sm text-white/80">Convert easily</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="max-w-7xl mx-auto px-4 mt-10 mb-24">
+    <h3 class="text-2xl font-extrabold mb-4">Tools</h3>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">Merge PDF</h4><button class="tag" onclick="openModal('mergeModal')">Open</button></div>
+        <p class="text-sm text-white/80">Combine multiple PDFs into one.</p>
+      </div>
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">Split PDF</h4><button class="tag" onclick="openModal('splitModal')">Open</button></div>
+        <p class="text-sm text-white/80">Extract a page range or list.</p>
+      </div>
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">Organize / Rotate</h4><button class="tag" onclick="openModal('organizeModal')">Open</button></div>
+        <p class="text-sm text-white/80">Reorder & rotate pages.</p>
+      </div>
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">Compress PDF</h4><button class="tag" onclick="openModal('compressModal')">Open</button></div>
+        <p class="text-sm text-white/80">Downsize by rasterizing pages.</p>
+      </div>
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">Images → PDF</h4><button class="tag" onclick="openModal('img2pdfModal')">Open</button></div>
+        <p class="text-sm text-white/80">Create a PDF from images.</p>
+      </div>
+      <div class="glass p-5">
+        <div class="flex items-center justify-between"><h4 class="text-xl font-bold">PDF → Images</h4><button class="tag" onclick="openModal('pdf2imgModal')">Open</button></div>
+        <p class="text-sm text-white/80">Export pages as images (ZIP).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Merge -->
+  <div class="modal" id="mergeModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('mergeModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Merge PDFs</h3>
+      <div class="dropzone" id="mergeDrop">Drop PDFs here or <label class="underline cursor-pointer"><input type="file" id="mergeFiles" accept="application/pdf" multiple class="hidden">browse</label></div>
+      <ul id="mergeList" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3"></ul>
+      <div class="mt-4 flex items-center gap-3">
+        <button class="btn" id="mergeRun">Merge & Download</button>
+        <span class="text-sm text-white/70">Drag to reorder</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Split -->
+  <div class="modal" id="splitModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('splitModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Split PDF</h3>
+      <p class="text-sm text-white/80 mb-2">Enter ranges like <code>1-3,5,8-9</code> (1-based).</p>
+      <input type="file" id="splitFile" accept="application/pdf" class="mb-3">
+      <input type="text" id="splitRanges" placeholder="e.g., 1-3,5,7-9" class="w-full px-3 py-2 rounded-lg text-slate-900">
+      <div class="mt-3"><button class="btn" id="splitRun">Extract & Download</button></div>
+    </div>
+  </div>
+
+  <!-- Organize / Rotate -->
+  <div class="modal" id="organizeModal">
+    <div class="glass w-full max-w-5xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('organizeModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Organize & Rotate</h3>
+      <input type="file" id="orgFile" accept="application/pdf" class="mb-3">
+      <div id="orgThumbs" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div class="mt-4 flex flex-wrap gap-3 items-center">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="orgRaster" checked> Export via raster (smaller, faster)</label>
+        <button class="btn" id="orgExport">Export PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compress -->
+  <div class="modal" id="compressModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('compressModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Compress PDF</h3>
+      <input type="file" id="compFile" accept="application/pdf" class="mb-3">
+      <label class="block text-sm mb-1">Quality</label>
+      <input type="range" id="compQuality" min="30" max="100" step="5" value="70" class="w-full">
+      <div class="progress mt-3"><div id="compProg"></div></div>
+      <div class="mt-3"><button class="btn" id="compRun">Compress & Download</button></div>
+      <p class="text-xs text-white/70 mt-2">Compression rasterizes pages and may remove selectable text.</p>
+    </div>
+  </div>
+
+  <!-- Images → PDF -->
+  <div class="modal" id="img2pdfModal">
+    <div class="glass w-full max-w-3xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('img2pdfModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">Images → PDF</h3>
+      <input type="file" id="img2pdfFiles" accept="image/*" multiple class="mb-3">
+      <div id="imgList" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+      <div class="mt-3 flex items-center gap-3">
+        <label class="flex items-center gap-2"><span>Page Size</span>
+          <select id="imgPageSize" class="px-2 py-1 rounded text-slate-900">
+            <option value="A4">A4</option><option value="Letter">Letter</option><option value="Auto">Auto</option>
+          </select>
+        </label>
+        <button class="btn" id="img2pdfRun">Create PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF → Images -->
+  <div class="modal" id="pdf2imgModal">
+    <div class="glass w-full max-w-2xl p-6 relative">
+      <button class="absolute right-4 top-4 tag" onclick="closeModal('pdf2imgModal')">Close</button>
+      <h3 class="text-2xl font-bold mb-2">PDF → Images (ZIP)</h3>
+      <input type="file" id="pdf2imgFile" accept="application/pdf" class="mb-3">
+      <label class="block text-sm mb-1">Quality</label>
+      <input type="range" id="pdf2imgQuality" min="50" max="100" step="5" value="90" class="w-full">
+      <div class="progress mt-3"><div id="pdf2imgProg"></div></div>
+      <div class="mt-3"><button class="btn" id="pdf2imgRun">Export Images</button></div>
+    </div>
+  </div>
+
+  <footer id="faq" class="max-w-6xl mx-auto px-4 pb-16">
+    <div class="glass p-6">
+      <h4 class="text-xl font-bold mb-2">FAQ</h4>
+      <ul class="list-disc list-inside text-sm text-white/80 space-y-1">
+        <li>All tools run locally in your browser.</li>
+        <li>For very large PDFs, processing time depends on your device.</li>
+        <li>Password-protected PDFs may fail to open if locked.</li>
+      </ul>
+    </div>
+  </footer>
+
+<script>
+// ===== Utilities =====
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function formatBytes(bytes){ const s=['B','KB','MB','GB']; if (bytes===0) return '0 B'; const i=Math.floor(Math.log(bytes)/Math.log(1024)); return (bytes/Math.pow(1024,i)).toFixed(2)+' '+s[i]; }
+function fileBase(name){ const i=name.lastIndexOf('.'); return i>0?name.substring(0,i):name; }
+
+// pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.76/pdf.worker.min.js";
+const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
+
+async function readAB(file){ return await file.arrayBuffer(); }
+
+async function renderPdfToCanvases(ab, scale=1.5){
+  const pdf = await pdfjsLib.getDocument({data:ab}).promise;
+  const canvases = [];
+  for(let i=1;i<=pdf.numPages;i++){
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({scale});
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    await page.render({canvasContext:ctx, viewport}).promise;
+    canvases.push(canvas);
+  }
+  return canvases;
+}
+
+async function canvasesToPdf(canvases, outName){
+  const doc = await PDFDocument.create();
+  for(const c of canvases){
+    const pngBytes = await new Promise(r => c.toBlob(b=>{const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsArrayBuffer(b);}, 'image/png', 0.92));
+    const img = await doc.embedPng(pngBytes);
+    const page = doc.addPage([img.width, img.height]);
+    page.drawImage(img,{x:0,y:0,width:img.width,height:img.height});
+  }
+  const bytes = await doc.save();
+  saveAs(new Blob([bytes], {type:'application/pdf'}), outName.endsWith('.pdf')?outName:(outName+'.pdf'));
+}
+
+// ===== 3D Background =====
+(function(){
+  const cv = document.getElementById('bg3d');
+  const renderer = new THREE.WebGLRenderer({canvas:cv, antialias:true, alpha:true});
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .1, 1000);
+  camera.position.z = 8;
+  const amb = new THREE.AmbientLight(0xffffff,.7); scene.add(amb);
+  const pt = new THREE.PointLight(0xffffff,1.1); pt.position.set(10,10,10); scene.add(pt);
+  const geo = new THREE.IcosahedronGeometry(3,5);
+  const mat = new THREE.MeshStandardMaterial({color:0xffffff, metalness:.25, roughness:.35, transparent:true, opacity:.65, emissive:0x111111});
+  const mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
+  const pGeo = new THREE.BufferGeometry();
+  const N = 1200, pos = new Float32Array(N*3);
+  for(let i=0;i<N;i++){ pos[i*3]=(Math.random()-0.5)*20; pos[i*3+1]=(Math.random()-0.5)*12; pos[i*3+2]=(Math.random()-0.5)*20; }
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  const pMat = new THREE.PointsMaterial({size:.06, transparent:true, opacity:.85});
+  const pts = new THREE.Points(pGeo, pMat); scene.add(pts);
+  function onResize(){ renderer.setSize(innerWidth, innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); }
+  addEventListener('resize', onResize); onResize();
+  let t=0;
+  (function anim(){ requestAnimationFrame(anim); t+=.01; mesh.rotation.x+=.002; mesh.rotation.y+=.003; const hue=(t*20)%360; pMat.color.setHSL((hue%360)/360,.7,.6); renderer.render(scene,camera); })();
+})();
+
+// ===== Merge =====
+(function(){
+  const dz = document.getElementById('mergeDrop');
+  const inp = document.getElementById('mergeFiles');
+  const list = document.getElementById('mergeList');
+  const run = document.getElementById('mergeRun');
+  let items = [];
+
+  function add(f){
+    const id = Math.random().toString(36).slice(2);
+    items.push({id, file:f});
+    const li = document.createElement('li');
+    li.dataset.id = id;
+    li.className = 'glass p-3 rounded-xl flex items-center justify-between';
+    li.innerHTML = `<div><div class="font-semibold">${f.name}</div><div class="text-xs text-white/70">${formatBytes(f.size)}</div></div>
+                    <button class="tag">Remove</button>`;
+    li.querySelector('button').onclick = ()=>{ items = items.filter(it=>it.id!==id); list.removeChild(li); };
+    list.appendChild(li);
+  }
+  function addList(fileList){ for(const f of fileList){ if(f.type==='application/pdf') add(f); } }
+  dz.addEventListener('dragover', e=>{e.preventDefault(); dz.classList.add('ring-2','ring-white');});
+  dz.addEventListener('dragleave', ()=>dz.classList.remove('ring-2','ring-white'));
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('ring-2','ring-white'); addList(e.dataTransfer.files); });
+  inp.addEventListener('change', e=> addList(e.target.files));
+  new Sortable(list, {animation:150, onEnd:()=>{
+    const order = Array.from(list.children).map(li=>li.dataset.id);
+    items.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+  }});
+
+  run.onclick = async ()=>{
+    if(!items.length) return alert('Add at least one PDF');
+    const out = await PDFDocument.create();
+    for(const it of items){
+      const ab = await readAB(it.file);
+      const src = await PDFDocument.load(ab, {ignoreEncryption:true});
+      const copied = await out.copyPages(src, src.getPageIndices());
+      copied.forEach(p=>out.addPage(p));
+    }
+    const bytes = await out.save();
+    saveAs(new Blob([bytes], {type:'application/pdf'}), 'merged.pdf');
+  };
+})();
+
+// ===== Split =====
+(function(){
+  const f = document.getElementById('splitFile');
+  const ranges = document.getElementById('splitRanges');
+  const run = document.getElementById('splitRun');
+
+  function parseRanges(s, max){
+    const set = new Set();
+    for(const token of s.split(',').map(x=>x.trim()).filter(Boolean)){
+      if(token.includes('-')){
+        let [a,b] = token.split('-').map(n=>parseInt(n,10));
+        if(isNaN(a)||isNaN(b)) continue;
+        if(a>b){ const t=a; a=b; b=t; }
+        for(let i=a;i<=b;i++){ if(i>=1 && i<=max) set.add(i-1); }
+      } else {
+        const n=parseInt(token,10); if(!isNaN(n) && n>=1 && n<=max) set.add(n-1);
+      }
+    }
+    return Array.from(set).sort((a,b)=>a-b);
+  }
+
+  run.onclick = async ()=>{
+    if(!f.files[0]) return alert('Choose a PDF');
+    const ab = await readAB(f.files[0]);
+    const src = await PDFDocument.load(ab, {ignoreEncryption:true});
+    const total = src.getPageCount();
+    const picks = parseRanges(ranges.value, total);
+    if(!picks.length) return alert('No valid pages found for the given ranges.');
+    const out = await PDFDocument.create();
+    const copied = await out.copyPages(src, picks);
+    copied.forEach(p=>out.addPage(p));
+    const bytes = await out.save();
+    saveAs(new Blob([bytes], {type:'application/pdf'}), fileBase(f.files[0].name)+'_split.pdf');
+  };
+})();
+
+// ===== Organize / Rotate =====
+(function(){
+  const input = document.getElementById('orgFile');
+  const box = document.getElementById('orgThumbs');
+  const run = document.getElementById('orgExport');
+  const raster = document.getElementById('orgRaster');
+
+  let srcAB = null;
+  let pages = []; // {index, canvas, rotation}
+
+  input.onchange = async ()=>{
+    box.innerHTML='';
+    pages = [];
+    srcAB = await readAB(input.files[0]);
+    const canvases = await renderPdfToCanvases(srcAB, 0.9);
+    canvases.forEach((c, i)=>{
+      const wrap = document.createElement('div');
+      wrap.className = 'glass p-2 thumb';
+      wrap.dataset.idx = i;
+      wrap.innerHTML = `<div class="text-xs mb-1 opacity-80">Page ${i+1}</div>`;
+      wrap.appendChild(c);
+      const ctrls = document.createElement('div'); ctrls.className='mt-2 flex gap-2';
+      const L = document.createElement('button'); L.className='tag'; L.textContent='⟲';
+      const R = document.createElement('button'); R.className='tag'; R.textContent='⟳';
+      ctrls.appendChild(L); ctrls.appendChild(R); wrap.appendChild(ctrls);
+      let rot = 0;
+      L.onclick = ()=>{ rot=(rot-90+360)%360; c.style.transform=`rotate(${rot}deg)`; pageByIdx(i).rotation=rot; };
+      R.onclick = ()=>{ rot=(rot+90)%360; c.style.transform=`rotate(${rot}deg)`; pageByIdx(i).rotation=rot; };
+      box.appendChild(wrap);
+      pages.push({index:i, canvas:c, rotation:0});
+    });
+    new Sortable(box, {animation:150});
+  };
+
+  function pageByIdx(i){ return pages.find(p=>p.index===i); }
+
+  run.onclick = async ()=>{
+    if(!srcAB) return alert('Choose a PDF');
+    // Determine new order from DOM
+    const orderIdx = Array.from(box.children).map(ch => parseInt(ch.dataset.idx,10));
+    const src = await PDFDocument.load(srcAB, {ignoreEncryption:true});
+    if(!raster.checked){
+      const out = await PDFDocument.create();
+      for(const idx of orderIdx){
+        const [page] = await out.copyPages(src, [idx]);
+        const pObj = pageByIdx(idx);
+        if(pObj.rotation) page.setRotation(degrees((page.getRotation().angle + pObj.rotation) % 360));
+        out.addPage(page);
+      }
+      const bytes = await out.save();
+      saveAs(new Blob([bytes], {type:'application/pdf'}), fileBase(input.files[0].name)+'_organized.pdf');
+    } else {
+      // Render each ordered page to canvas (respect rotation), then rebuild
+      const canvases = await renderPdfToCanvases(await src.save(), 1.2);
+      const orderedCanvases = [];
+      for(const idx of orderIdx){
+        const pObj = pageByIdx(idx);
+        const c = canvases[idx];
+        if(pObj.rotation){
+          // rotate into a new canvas
+          const rad = pObj.rotation * Math.PI/180;
+          const sin = Math.abs(Math.sin(rad)), cos = Math.abs(Math.cos(rad));
+          const w = c.width, h = c.height;
+          const newW = Math.round(w*cos + h*sin);
+          const newH = Math.round(w*sin + h*cos);
+          const outC = document.createElement('canvas');
+          outC.width=newW; outC.height=newH;
+          const ctx = outC.getContext('2d');
+          ctx.translate(newW/2, newH/2);
+          ctx.rotate(rad);
+          ctx.drawImage(c, -w/2, -h/2);
+          orderedCanvases.push(outC);
+        } else {
+          orderedCanvases.push(c);
+        }
+      }
+      await canvasesToPdf(orderedCanvases, fileBase(input.files[0].name)+'_organized');
+    }
+  };
+})();
+
+// ===== Compress =====
+(function(){
+  const f = document.getElementById('compFile');
+  const q = document.getElementById('compQuality');
+  const run = document.getElementById('compRun');
+  const prog = document.getElementById('compProg');
+  run.onclick = async ()=>{
+    if(!f.files[0]) return alert('Choose a PDF');
+    prog.style.width = '0%';
+    const ab = await readAB(f.files[0]);
+    const pdf = await pdfjsLib.getDocument({data:ab}).promise;
+    const outCanvases = [];
+    for(let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({scale:1.2});
+      const c = document.createElement('canvas'); c.width = viewport.width; c.height = viewport.height;
+      await page.render({canvasContext:c.getContext('2d'), viewport}).promise;
+      // re-encode to JPEG
+      const tmp = document.createElement('canvas'); tmp.width=c.width; tmp.height=c.height;
+      tmp.getContext('2d').drawImage(c,0,0);
+      const dataUrl = tmp.toDataURL('image/jpeg', parseInt(q.value,10)/100);
+      const img = new Image();
+      await new Promise(r=>{ img.onload=()=>{ const oc=document.createElement('canvas'); oc.width=img.width; oc.height=img.height; oc.getContext('2d').drawImage(img,0,0); outCanvases.push(oc); r(); }; img.src=dataUrl; });
+      prog.style.width = Math.round(i/pdf.numPages*100)+'%';
+    }
+    await canvasesToPdf(outCanvases, fileBase(f.files[0].name)+'_compressed');
+  };
+})();
+
+// ===== Images → PDF =====
+(function(){
+  const inp = document.getElementById('img2pdfFiles');
+  const box = document.getElementById('imgList');
+  const run = document.getElementById('img2pdfRun');
+  const pageSel = document.getElementById('imgPageSize');
+  let images = [];
+  inp.onchange = ()=>{
+    images = Array.from(inp.files);
+    box.innerHTML='';
+    images.forEach(f=>{
+      const url = URL.createObjectURL(f);
+      const div = document.createElement('div'); div.className='glass p-2';
+      div.innerHTML = `<div class="text-xs mb-1 opacity-80">${f.name}</div><img class="rounded" src="${url}">`;
+      box.appendChild(div);
+    });
+    new Sortable(box, {animation:150});
+  };
+  run.onclick = async ()=>{
+    if(!images.length) return alert('Choose images');
+    const doc = await PDFDocument.create();
+    for(const f of images){
+      const ab = await readAB(f);
+      let img; let dims;
+      if(f.type.includes('png')){ img = await doc.embedPng(ab); dims=img.scale(1); }
+      else { img = await doc.embedJpg(ab); dims=img.scale(1); }
+      let page;
+      if(pageSel.value==='A4'){ page = doc.addPage([595.28,841.89]); }
+      else if(pageSel.value==='Letter'){ page = doc.addPage([612,792]); }
+      else { page = doc.addPage([dims.width, dims.height]); }
+      const {width, height} = page.getSize();
+      const s = Math.min(width/dims.width, height/dims.height);
+      const w = dims.width*s, h=dims.height*s;
+      page.drawImage(img,{x:(width-w)/2, y:(height-h)/2, width:w, height:h});
+    }
+    const bytes = await doc.save();
+    saveAs(new Blob([bytes], {type:'application/pdf'}), 'images_to_pdf.pdf');
+  };
+})();
+
+// ===== PDF → Images (ZIP) =====
+(function(){
+  const f = document.getElementById('pdf2imgFile');
+  const q = document.getElementById('pdf2imgQuality');
+  const run = document.getElementById('pdf2imgRun');
+  const prog = document.getElementById('pdf2imgProg');
+  function dataUriToU8(dataURI){ const byteString=atob(dataURI.split(',')[1]); const u8=new Uint8Array(byteString.length); for(let i=0;i<byteString.length;i++) u8[i]=byteString.charCodeAt(i); return u8; }
+  run.onclick = async ()=>{
+    if(!f.files[0]) return alert('Choose a PDF');
+    prog.style.width='0%';
+    const ab = await readAB(f.files[0]);
+    const pdf = await pdfjsLib.getDocument({data:ab}).promise;
+    const zip = new JSZip();
+    for(let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({scale:2.0});
+      const c = document.createElement('canvas'); c.width=viewport.width; c.height=viewport.height;
+      await page.render({canvasContext:c.getContext('2d'), viewport}).promise;
+      const dataUrl = c.toDataURL('image/jpeg', parseInt(q.value,10)/100);
+      zip.file(`page_${i}.jpg`, dataUriToU8(dataUrl));
+      prog.style.width = Math.round(i/pdf.numPages*100)+'%';
+    }
+    const content = await zip.generateAsync({type:'blob'});
+    saveAs(content, fileBase(f.files[0].name)+'_images.zip');
+  };
+})();
+</script>
+</body>
+</html>
